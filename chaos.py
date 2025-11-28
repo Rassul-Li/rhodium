@@ -110,12 +110,14 @@ def initialize_parameters(session: Session):
 	session.commit()
 
 def main():
-	DB_PATH = pathlib.Path("/home/rhodium/db/rhodium.db")
-
 	parser = argparse.ArgumentParser(description="Rhodium parameter initializer")
 	parser.add_argument("--no-preserve-db", action="store_true", help="Drop and recreate DB")
+	parser.add_argument('--path', type=pathlib.Path, default=pathlib.Path("/home/rhodium/db"))
 	args = parser.parse_args()
 
+	DB_PATH = args.path.joinpath("rhodium.db")
+
+	print(f'DB_PATH: {DB_PATH}')
 	DB_PATH.parent.mkdir(parents=True, exist_ok=True)
 	engine = make_engine(DB_PATH)
 
