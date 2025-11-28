@@ -15,6 +15,7 @@ from __future__ import annotations
 import os
 import binascii
 from datetime import datetime, date
+import argparse
 
 from flask import (
 	Flask, render_template, request, redirect, url_for, flash, jsonify
@@ -27,10 +28,6 @@ from chaos import (
 	Base, Item, SysParameters, Counters,
 	make_engine
 )
-
-DB_PATH = "/home/rhodium/db/rhodium.db"
-DB_URI = f"sqlite:///{DB_PATH}"
-
 
 # ---------------------------------------------------------------------
 #  ID Generation
@@ -232,4 +229,13 @@ def api_today():
 # ---------------------------------------------------------------------
 
 if __name__ == "__main__":
+	parser = argparse.ArgumentParser(description="Rhodium hestia runtime")
+	parser.add_argument('--path', type=pathlib.Path, default=pathlib.Path("/home/rhodium/db"))
+	args = parser.parse_args()
+
+	DB_PATH = args.path.joinpath("rhodium.db")
+
+	print(f'DB_PATH: {DB_PATH}')
+
+	DB_URI = f"sqlite:///{DB_PATH}"
 	app.run(host="0.0.0.0", port=80)
