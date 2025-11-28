@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<meta charset="utf-8">
+	<title>Rhodium Tasks</title>
+	<style>
+		body {
+			font-family: sans-serif;
+			margin: 2rem;
+		}
+		.nav {
+			margin-bottom: 1.5rem;
+		}
+		.nav a {
+			margin-right: 1rem;
+		}
+		.flash {
+			padding: 0.5rem;
+			margin-bottom: 1rem;
+			border: 1px solid #888;
+			background: #f0f0f0;
+		}
+		table {
+			border-collapse: collapse;
+			width: 100%;
+			margin-top: 1rem;
+		}
+		th, td {
+			border: 1px solid #bbb;
+			padding: 0.4rem 0.6rem;
+		}
+		th {
+			background: #eee;
+		}
+		input[type="text"],
+		input[type="number"],
+		input[type="datetime-local"],
+		textarea,
+		select {
+			width: 100%;
+			padding: 0.3rem;
+			margin-bottom: 0.7rem;
+		}
+		.btn {
+			padding: 0.4rem 0.8rem;
+			display: inline-block;
+			border: 1px solid #555;
+			background: #ddd;
+			cursor: pointer;
+			text-decoration: none;
+		}
+		.btn:hover {
+			background: #ccc;
+		}
+	</style>
+</head>
+<body>
+
+<div class="nav">
+	<a href="{{ url_for('index') }}">Home</a>
+	<a href="{{ url_for('create') }}">New Task</a>
+</div>
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+	{% for cat, msg in messages %}
+	  <div class="flash">{{ msg }}</div>
+	{% endfor %}
+  {% endif %}
+{% endwith %}
+
+{% block content %}{% endblock %}
+
+</body>
+</html>

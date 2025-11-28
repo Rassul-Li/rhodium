@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block content %}
+
+<h1>Tasks</h1>
+
+<table>
+	<thead>
+		<tr>
+			<th>Title</th>
+			<th>Due</th>
+			<th>Status</th>
+			<th>Priority</th>
+			<th>Created</th>
+			<th></th>
+		</tr>
+	</thead>
+	<tbody>
+		{% for item in items %}
+		<tr>
+			<td>{{ item.title }}</td>
+			<td>
+				{% if item.due_date %}
+					{{ item.due_date.strftime("%Y-%m-%d %H:%M") }}
+				{% else %}
+					-
+				{% endif %}
+			</td>
+			<td>{{ item.status }}</td>
+			<td>{{ item.priority }}</td>
+			<td>{{ item.created_at.strftime("%Y-%m-%d") }}</td>
+			<td>
+				<a class="btn" href="{{ url_for('edit', item_hex=item.id.hex() ) }}">Edit</a>
+			</td>
+		</tr>
+		{% endfor %}
+	</tbody>
+</table>
+
+{% endblock %}

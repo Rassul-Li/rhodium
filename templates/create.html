@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block content %}
+
+<h1>Create Task</h1>
+
+<form method="post">
+
+	<label>Title</label>
+	<input type="text" name="title" required>
+
+	<label>Description</label>
+	<textarea name="description" rows="4"></textarea>
+
+	<label>Due Date</label>
+	<input type="datetime-local" name="due_date">
+
+	<label>Recurring (optional)</label>
+	<input type="text" name="recurring" placeholder="e.g. daily, weekly">
+
+	<label>Priority</label>
+	<input type="number" name="priority" value="0">
+
+	<button class="btn" type="submit">Create</button>
+</form>
+
+{% endblock %}
