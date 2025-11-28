@@ -11,7 +11,7 @@ import secrets
 import uuid
 import pathlib
 import argparse
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime, Date, ForeignKey
 

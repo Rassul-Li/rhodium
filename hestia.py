@@ -17,15 +17,15 @@ import binascii
 from datetime import datetime, date
 
 from flask import (
-    Flask, render_template, request, redirect, url_for, flash, jsonify
+	Flask, render_template, request, redirect, url_for, flash, jsonify
 )
 from sqlalchemy import create_engine, select, update
 from sqlalchemy.orm import Session
 
 # Import your models
 from chaos import (
-    Base, Item, SysParameters, Counters,
-    make_engine
+	Base, Item, SysParameters, Counters,
+	make_engine
 )
 
 DB_PATH = "/home/rhodium/db/rhodium.db"
@@ -37,40 +37,40 @@ DB_URI = f"sqlite:///{DB_PATH}"
 # ---------------------------------------------------------------------
 
 def generate_item_id(session: Session) -> bytes:
-    """
-    Generates a 16-byte monotonic ID with structure:
-      [56-bit timestamp_ms][16-bit mac-hash][56-bit counter]
+	"""
+	Generates a 16-byte monotonic ID with structure:
+	  [56-bit timestamp_ms][16-bit mac-hash][56-bit counter]
 
-    All values are stored big-endian and concatenated to 16 bytes.
-    """
+	All values are stored big-endian and concatenated to 16 bytes.
+	"""
 
-    # 1. Monotonic ms timestamp (56 bits)
-    ts_ms = int(datetime.utcnow().timestamp() * 1000)
-    ts_bytes = ts_ms.to_bytes(7, "big")   # 56 bits / 7 bytes
+	# 1. Monotonic ms timestamp (56 bits)
+	ts_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
+	ts_bytes = ts_ms.to_bytes(7, "big")   # 56 bits / 7 bytes
 
-    # 2. 16-bit MAC-hash fragment
-    row = session.get(SysParameters, "node_id")
-    if row is None:
-        raise RuntimeError("Database missing SysParameters.node_id")
-    node_id_hex = row.value                # e.g. "ab45"
-    mac_bytes = bytes.fromhex(node_id_hex) # 2 bytes
+	# 2. 16-bit MAC-hash fragment
+	row = session.get(SysParameters, "node_id")
+	if row is None:
+		raise RuntimeError("Database missing SysParameters.node_id")
+	node_id_hex = row.value				# e.g. "ab45"
+	mac_bytes = bytes.fromhex(node_id_hex) # 2 bytes
 
-    # 3. Increment 56-bit counter
-    ctr_row = session.get(Counters, "primary_counter")
-    if ctr_row is None:
-        raise RuntimeError("Database missing Counters.primary_counter")
+	# 3. Increment 56-bit counter
+	ctr_row = session.get(Counters, "primary_counter")
+	if ctr_row is None:
+		raise RuntimeError("Database missing Counters.primary_counter")
 
-    new_value = ctr_row.value + 1
-    session.execute(
-        update(Counters)
-        .where(Counters.key == "primary_counter")
-        .values(value=new_value, last_change=datetime.utcnow())
-    )
-    session.commit()
+	new_value = ctr_row.value + 1
+	session.execute(
+		update(Counters)
+		.where(Counters.key == "primary_counter")
+		.values(value=new_value, last_change=datetime.now(timezone.utc))
+	)
+	session.commit()
 
-    ctr_bytes = new_value.to_bytes(7, "big")
+	ctr_bytes = new_value.to_bytes(7, "big")
 
-    return ts_bytes + mac_bytes + ctr_bytes   # 7 + 2 + 7 = 16 bytes
+	return ts_bytes + mac_bytes + ctr_bytes   # 7 + 2 + 7 = 16 bytes
 
 
 # ---------------------------------------------------------------------
@@ -91,19 +91,19 @@ Base.metadata.create_all(engine)
 # ---------------------------------------------------------------------
 
 def hexid(b: bytes) -> str:
-    """Convert BLOB(16) to readable hex string."""
-    return binascii.hexlify(b).decode("ascii")
+	"""Convert BLOB(16) to readable hex string."""
+	return binascii.hexlify(b).decode("ascii")
 
 
 def unhexid(s: str) -> bytes:
-    """Convert 32-char hex string back to 16 bytes."""
-    try:
-        b = binascii.unhexlify(s)
-        if len(b) != 16:
-            raise ValueError
-        return b
-    except Exception:
-        raise ValueError("Invalid item ID")
+	"""Convert 32-char hex string back to 16 bytes."""
+	try:
+		b = binascii.unhexlify(s)
+		if len(b) != 16:
+			raise ValueError
+		return b
+	except Exception:
+		raise ValueError("Invalid item ID")
 
 
 # ---------------------------------------------------------------------
@@ -112,124 +112,124 @@ def unhexid(s: str) -> bytes:
 
 @app.route("/")
 def index():
-    """List all items sorted by priority and due_date."""
-    with Session(engine) as session:
-        rows = session.execute(
-            select(Item).order_by(Item.priority.desc(), Item.due_date.asc().nulls_last())
-        ).scalars().all()
+	"""List all items sorted by priority and due_date."""
+	with Session(engine) as session:
+		rows = session.execute(
+			select(Item).order_by(Item.priority.desc(), Item.due_date.asc().nulls_last())
+		).scalars().all()
 
-    return render_template("index.html", items=rows)
+	return render_template("index.html", items=rows)
 
 
 @app.route("/create", methods=["GET", "POST"])
 def create():
-    if request.method == "POST":
-        title = request.form["title"].strip()
-        if not title:
-            flash("Title is required.", "danger")
-            return redirect(url_for("create"))
+	if request.method == "POST":
+		title = request.form["title"].strip()
+		if not title:
+			flash("Title is required.", "danger")
+			return redirect(url_for("create"))
 
-        description = request.form.get("description") or None
-        recurring = request.form.get("recurring") or None
-        priority = int(request.form.get("priority") or 0)
-        due_raw = request.form.get("due_date")
+		description = request.form.get("description") or None
+		recurring = request.form.get("recurring") or None
+		priority = int(request.form.get("priority") or 0)
+		due_raw = request.form.get("due_date")
 
-        due_date = datetime.fromisoformat(due_raw) if due_raw else None
+		due_date = datetime.fromisoformat(due_raw) if due_raw else None
 
-        with Session(engine) as session:
-            item_id = generate_item_id(session)
+		with Session(engine) as session:
+			item_id = generate_item_id(session)
 
-            itm = Item(
-                id=item_id,
-                title=title,
-                description=description,
-                due_date=due_date,
-                recurring=recurring,
-                priority=priority,
-            )
-            session.add(itm)
-            session.commit()
+			itm = Item(
+				id=item_id,
+				title=title,
+				description=description,
+				due_date=due_date,
+				recurring=recurring,
+				priority=priority,
+			)
+			session.add(itm)
+			session.commit()
 
-        flash("Item created.", "success")
-        return redirect(url_for("index"))
+		flash("Item created.", "success")
+		return redirect(url_for("index"))
 
-    return render_template("create.html")
+	return render_template("create.html")
 
 
 @app.route("/edit/<string:item_hex>", methods=["GET", "POST"])
 def edit(item_hex):
-    try:
-        item_id = unhexid(item_hex)
-    except ValueError:
-        return "Invalid ID", 400
+	try:
+		item_id = unhexid(item_hex)
+	except ValueError:
+		return "Invalid ID", 400
 
-    with Session(engine) as session:
-        item = session.get(Item, item_id)
+	with Session(engine) as session:
+		item = session.get(Item, item_id)
 
-        if item is None:
-            return "Item not found", 404
+		if item is None:
+			return "Item not found", 404
 
-        if request.method == "POST":
-            title = request.form["title"]
-            description = request.form.get("description") or None
-            recurring = request.form.get("recurring") or None
-            priority = int(request.form.get("priority") or 0)
-            status = request.form.get("status") or item.status
+		if request.method == "POST":
+			title = request.form["title"]
+			description = request.form.get("description") or None
+			recurring = request.form.get("recurring") or None
+			priority = int(request.form.get("priority") or 0)
+			status = request.form.get("status") or item.status
 
-            due_raw = request.form.get("due_date")
-            due_date = datetime.fromisoformat(due_raw) if due_raw else None
+			due_raw = request.form.get("due_date")
+			due_date = datetime.fromisoformat(due_raw) if due_raw else None
 
-            completed_at = item.completed_at
-            if status == "done" and item.completed_at is None:
-                completed_at = datetime.utcnow()
+			completed_at = item.completed_at
+			if status == "done" and item.completed_at is None:
+				completed_at = datetime.now(timezone.utc)
 
-            session.execute(
-                update(Item)
-                .where(Item.id == item_id)
-                .values(
-                    title=title,
-                    description=description,
-                    due_date=due_date,
-                    recurring=recurring,
-                    priority=priority,
-                    status=status,
-                    completed_at=completed_at,
-                )
-            )
-            session.commit()
+			session.execute(
+				update(Item)
+				.where(Item.id == item_id)
+				.values(
+					title=title,
+					description=description,
+					due_date=due_date,
+					recurring=recurring,
+					priority=priority,
+					status=status,
+					completed_at=completed_at,
+				)
+			)
+			session.commit()
 
-            flash("Item updated.", "success")
-            return redirect(url_for("index"))
+			flash("Item updated.", "success")
+			return redirect(url_for("index"))
 
-    return render_template("edit.html", item=item, item_hex=item_hex)
+	return render_template("edit.html", item=item, item_hex=item_hex)
 
 
 @app.route("/api/today")
 def api_today():
-    """Return all items due today or overdue."""
-    now = datetime.utcnow()
+	"""Return all items due today or overdue."""
+	now = datetime.now(timezone.utc)
 
-    with Session(engine) as session:
-        rows = session.execute(
-            select(Item)
-            .where(Item.status != "done")
-            .where((Item.due_date == None) | (Item.due_date <= now))
-            .order_by(Item.priority.desc())
-        ).scalars().all()
+	with Session(engine) as session:
+		rows = session.execute(
+			select(Item)
+			.where(Item.status != "done")
+			.where((Item.due_date == None) | (Item.due_date <= now))
+			.order_by(Item.priority.desc())
+		).scalars().all()
 
-    return jsonify([
-        {
-            "id": hexid(i.id),
-            "title": i.title,
-            "description": i.description,
-            "due_date": i.due_date.isoformat() if i.due_date else None,
-            "status": i.status,
-        }
-        for i in rows
-    ])
+	return jsonify([
+		{
+			"id": hexid(i.id),
+			"title": i.title,
+			"description": i.description,
+			"due_date": i.due_date.isoformat() if i.due_date else None,
+			"status": i.status,
+		}
+		for i in rows
+	])
 
 
 # ---------------------------------------------------------------------
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=80)
+	app.run(host="0.0.0.0", port=80)
