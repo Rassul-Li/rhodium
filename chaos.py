@@ -12,6 +12,7 @@ import uuid
 import pathlib
 import argparse
 from datetime import datetime, timezone
+from functools import partial
 
 from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime, Date, ForeignKey
 
@@ -47,13 +48,13 @@ class SysParameters(Base):
 	__tablename__ = "SysParameters"
 	key: Mapped[str] = mapped_column(String, primary_key=True)
 	value: Mapped[str] = mapped_column(String, nullable=False)
-	last_change: Mapped[datetime] = mapped_column(DateTime, default=datetime.now(timezone.utc))
+	last_change: Mapped[datetime] = mapped_column(DateTime, default=partial(datetime.now, tz=timezone.utc))
 
 class Counters(Base):
 	__tablename__ = "Counters"
 	key: Mapped[str] = mapped_column(String, primary_key=True)
 	value: Mapped[int] = mapped_column(Integer, nullable=False)
-	last_change: Mapped[datetime] = mapped_column(DateTime, default=datetime.now(timezone.utc))
+	last_change: Mapped[datetime] = mapped_column(DateTime, default=partial(datetime.now, tz=timezone.utc))
 
 class Item(Base):
 	__tablename__ = "items"
@@ -63,7 +64,7 @@ class Item(Base):
 	description: Mapped[str | None] = mapped_column(nullable=True)
 	status: Mapped[str] = mapped_column(String, default="pending", nullable=False)
 	due_date: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-	created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now(timezone.utc))
+	created_at: Mapped[datetime] = mapped_column(DateTime, default=partial(datetime.now, tz=timezone.utc))
 	completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 	recurring: Mapped[str | None] = mapped_column(String(64), nullable=True)
 	priority: Mapped[int] = mapped_column(Integer, default=0)
@@ -103,7 +104,7 @@ def initialize_parameters(session: Session):
 	seed = Seed()
 	ensure_parameter(session, "node_id", get_node_id)
 	ensure_parameter(session, "trng_seed", seed.hex)
-	ensure_parameter(session, "first_boot", datetime.now(timezone.utc))
+	ensure_parameter(session, "first_boot", partial(datetime.now, tz=timezone.utc))
 
 	ensure_counter(session, "primary_counter", seed)
 
