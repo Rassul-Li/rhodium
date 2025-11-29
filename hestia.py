@@ -70,20 +70,6 @@ def generate_item_id(session: Session) -> bytes:
 
 	return ts_bytes + mac_bytes + ctr_bytes   # 7 + 2 + 7 = 16 bytes
 
-
-# ---------------------------------------------------------------------
-#  Flask App Setup
-# ---------------------------------------------------------------------
-
-app = Flask(__name__)
-app.secret_key = os.getenv("RHODIUM_SECRET", "pineapple-pizza-extravaganza")
-
-engine = make_engine(pathlib.Path(DB_PATH))
-
-# Ensure DB exists
-Base.metadata.create_all(engine)
-
-
 # ---------------------------------------------------------------------
 #  Helpers
 # ---------------------------------------------------------------------
@@ -228,6 +214,17 @@ def api_today():
 
 
 # ---------------------------------------------------------------------
+def flask_setup(db_path: pathlib.Path) -> Flask:
+	app = Flask(__name__)
+	app.secret_key = os.getenv("RHODIUM_SECRET", "pineapple-pizza-extravaganza")
+
+	engine = make_engine(db_path)
+	Base.metadata.create_all(engine)
+
+	app.engine = engine
+	return app
+
+def argment_parse() -> 
 
 if __name__ == "__main__":
 	parser = argparse.ArgumentParser(description="Rhodium hestia runtime")
@@ -237,6 +234,7 @@ if __name__ == "__main__":
 	DB_PATH = args.path.joinpath("rhodium.db")
 
 	print(f'DB_PATH: {DB_PATH}')
-
 	DB_URI = f"sqlite:///{DB_PATH}"
+
+	app = flask_setup(DB_PATH)
 	app.run(host="0.0.0.0", port=80)
