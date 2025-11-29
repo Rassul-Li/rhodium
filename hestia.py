@@ -91,138 +91,138 @@ def unhexid(s: str) -> bytes:
 
 
 # ---------------------------------------------------------------------
-#  Routes
-# ---------------------------------------------------------------------
-
-@app.route("/")
-def index():
-	"""List all items sorted by priority and due_date."""
-	with Session(engine) as session:
-		rows = session.execute(
-			select(Item).order_by(Item.priority.desc(), Item.due_date.asc().nulls_last())
-		).scalars().all()
-
-	return render_template("index.html", items=rows)
-
-
-@app.route("/create", methods=["GET", "POST"])
-def create():
-	if request.method == "POST":
-		title = request.form["title"].strip()
-		if not title:
-			flash("Title is required.", "danger")
-			return redirect(url_for("create"))
-
-		description = request.form.get("description") or None
-		recurring = request.form.get("recurring") or None
-		priority = int(request.form.get("priority") or 0)
-		due_raw = request.form.get("due_date")
-
-		due_date = datetime.fromisoformat(due_raw) if due_raw else None
-
-		with Session(engine) as session:
-			item_id = generate_item_id(session)
-
-			itm = Item(
-				id=item_id,
-				title=title,
-				description=description,
-				due_date=due_date,
-				recurring=recurring,
-				priority=priority,
-			)
-			session.add(itm)
-			session.commit()
-
-		flash("Item created.", "success")
-		return redirect(url_for("index"))
-
-	return render_template("create.html")
-
-
-@app.route("/edit/<string:item_hex>", methods=["GET", "POST"])
-def edit(item_hex):
-	try:
-		item_id = unhexid(item_hex)
-	except ValueError:
-		return "Invalid ID", 400
-
-	with Session(engine) as session:
-		item = session.get(Item, item_id)
-
-		if item is None:
-			return "Item not found", 404
-
-		if request.method == "POST":
-			title = request.form["title"]
-			description = request.form.get("description") or None
-			recurring = request.form.get("recurring") or None
-			priority = int(request.form.get("priority") or 0)
-			status = request.form.get("status") or item.status
-
-			due_raw = request.form.get("due_date")
-			due_date = datetime.fromisoformat(due_raw) if due_raw else None
-
-			completed_at = item.completed_at
-			if status == "done" and item.completed_at is None:
-				completed_at = datetime.now(timezone.utc)
-
-			session.execute(
-				update(Item)
-				.where(Item.id == item_id)
-				.values(
-					title=title,
-					description=description,
-					due_date=due_date,
-					recurring=recurring,
-					priority=priority,
-					status=status,
-					completed_at=completed_at,
-				)
-			)
-			session.commit()
-
-			flash("Item updated.", "success")
-			return redirect(url_for("index"))
-
-	return render_template("edit.html", item=item, item_hex=item_hex)
-
-
-@app.route("/api/today")
-def api_today():
-	"""Return all items due today or overdue."""
-	now = datetime.now(timezone.utc)
-
-	with Session(engine) as session:
-		rows = session.execute(
-			select(Item)
-			.where(Item.status != "done")
-			.where((Item.due_date == None) | (Item.due_date <= now))
-			.order_by(Item.priority.desc())
-		).scalars().all()
-
-	return jsonify([
-		{
-			"id": hexid(i.id),
-			"title": i.title,
-			"description": i.description,
-			"due_date": i.due_date.isoformat() if i.due_date else None,
-			"status": i.status,
-		}
-		for i in rows
-	])
-
-
-# ---------------------------------------------------------------------
 def flask_setup(db_path: pathlib.Path) -> Flask:
 	app = Flask(__name__)
 	app.secret_key = os.getenv("RHODIUM_SECRET", "pineapple-pizza-extravaganza")
 
 	engine = make_engine(db_path)
 	Base.metadata.create_all(engine)
-
 	app.engine = engine
+
+	# ---------------------------------------------------------------------
+	#  Routes
+	# ---------------------------------------------------------------------
+
+	@app.route("/")
+	def index():
+		"""List all items sorted by priority and due_date."""
+		with Session(engine) as session:
+			rows = session.execute(
+				select(Item).order_by(Item.priority.desc(), Item.due_date.asc().nulls_last())
+			).scalars().all()
+
+		return render_template("index.html", items=rows)
+
+
+	@app.route("/create", methods=["GET", "POST"])
+	def create():
+		if request.method == "POST":
+			title = request.form["title"].strip()
+			if not title:
+				flash("Title is required.", "danger")
+				return redirect(url_for("create"))
+
+			description = request.form.get("description") or None
+			recurring = request.form.get("recurring") or None
+			priority = int(request.form.get("priority") or 0)
+			due_raw = request.form.get("due_date")
+
+			due_date = datetime.fromisoformat(due_raw) if due_raw else None
+
+			with Session(engine) as session:
+				item_id = generate_item_id(session)
+
+				itm = Item(
+					id=item_id,
+					title=title,
+					description=description,
+					due_date=due_date,
+					recurring=recurring,
+					priority=priority,
+				)
+				session.add(itm)
+				session.commit()
+
+			flash("Item created.", "success")
+			return redirect(url_for("index"))
+
+		return render_template("create.html")
+
+
+	@app.route("/edit/<string:item_hex>", methods=["GET", "POST"])
+	def edit(item_hex):
+		try:
+			item_id = unhexid(item_hex)
+		except ValueError:
+			return "Invalid ID", 400
+
+		with Session(engine) as session:
+			item = session.get(Item, item_id)
+
+			if item is None:
+				return "Item not found", 404
+
+			if request.method == "POST":
+				title = request.form["title"]
+				description = request.form.get("description") or None
+				recurring = request.form.get("recurring") or None
+				priority = int(request.form.get("priority") or 0)
+				status = request.form.get("status") or item.status
+
+				due_raw = request.form.get("due_date")
+				due_date = datetime.fromisoformat(due_raw) if due_raw else None
+
+				completed_at = item.completed_at
+				if status == "done" and item.completed_at is None:
+					completed_at = datetime.now(timezone.utc)
+
+				session.execute(
+					update(Item)
+					.where(Item.id == item_id)
+					.values(
+						title=title,
+						description=description,
+						due_date=due_date,
+						recurring=recurring,
+						priority=priority,
+						status=status,
+						completed_at=completed_at,
+					)
+				)
+				session.commit()
+
+				flash("Item updated.", "success")
+				return redirect(url_for("index"))
+
+		return render_template("edit.html", item=item, item_hex=item_hex)
+
+
+	@app.route("/api/today")
+	def api_today():
+		"""Return all items due today or overdue."""
+		now = datetime.now(timezone.utc)
+
+		with Session(engine) as session:
+			rows = session.execute(
+				select(Item)
+				.where(Item.status != "done")
+				.where((Item.due_date == None) | (Item.due_date <= now))
+				.order_by(Item.priority.desc())
+			).scalars().all()
+
+		return jsonify([
+			{
+				"id": hexid(i.id),
+				"title": i.title,
+				"description": i.description,
+				"due_date": i.due_date.isoformat() if i.due_date else None,
+				"status": i.status,
+			}
+			for i in rows
+		])
 	return app
+
+
 
 if __name__ == "__main__":
 	parser = argparse.ArgumentParser(description="Rhodium hestia runtime")
