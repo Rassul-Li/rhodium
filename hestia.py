@@ -224,8 +224,6 @@ def flask_setup(db_path: pathlib.Path) -> Flask:
 	app.engine = engine
 	return app
 
-def argment_parse() -> 
-
 if __name__ == "__main__":
 	parser = argparse.ArgumentParser(description="Rhodium hestia runtime")
 	parser.add_argument('--path', type=pathlib.Path, default=pathlib.Path("/home/rhodium/db"))
