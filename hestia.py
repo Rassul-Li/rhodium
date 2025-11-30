@@ -13,6 +13,7 @@ Supports:
 from __future__ import annotations
 
 import os
+import re
 import binascii
 from datetime import datetime, timezone, date, time
 from zoneinfo import ZoneInfo
@@ -81,7 +82,6 @@ def hexid(b: bytes) -> str:
 	"""Convert BLOB(16) to readable hex string."""
 	return binascii.hexlify(b).decode("ascii")
 
-
 def unhexid(s: str) -> bytes:
 	"""Convert 32-char hex string back to 16 bytes."""
 	try:
@@ -92,18 +92,47 @@ def unhexid(s: str) -> bytes:
 	except Exception:
 		raise ValueError("Invalid item ID")
 
+def get_secret(db_dir: pathlib.Path, regen: bool):
+	secret_file = db_dir.joinpath('rhodium_secret')
+	
+	if regen or not secret_file.exists():
+		import secrets
+		secret = secrets.token_hex(32)
+		
+		try:
+			secret_file.parent.mkdir(parents=True, exist_ok=True)
+			secret_file.write_text(secret)
+			secret_file.chmod(0o600)
+			return secret
+		except (PermissionError, OSError) as e:
+			print(f"FATAL: Cannot write secret: {e}", file=sys.stderr)
+			sys.exit(1)
+	
+	try:
+		secret = secret_file.read_text().strip()
+		
+		# Validate: exactly 64 hexadecimal characters
+		if not re.match(r'^[0-9a-f]{64}$', secret):
+			print(f"FATAL: Secret file corrupted (invalid format)", file=sys.stderr)
+			print(f"  Expected: 64 hex characters, got: {len(secret)} chars", file=sys.stderr)
+			print(f"  Delete {secret_file} and restart to regenerate", file=sys.stderr)
+			sys.exit(1)
+		
+		return secret
+		
+	except (PermissionError, OSError) as e:
+		print(f"FATAL: Cannot read secret: {e}", file=sys.stderr)
+		sys.exit(1)
 
 # ---------------------------------------------------------------------
-def flask_setup(db_path: pathlib.Path | None = None) -> Flask:
+def flask_setup(db_dir: pathlib.Path, log_dir: pathlib.Path, secret_key) -> Flask:
 
-	if db_path is None:
-		db_path = pathlib.Path("/home/rhodium/db/rhodium.db")
-	
+	db_path = db_dir.joinpath("rhodium.db")
 	db_path.parent.mkdir(parents=True, exist_ok=True)
 
 	app = Flask(__name__)
 
-	app.secret_key = os.getenv("RHODIUM_SECRET")
+	app.secret_key = secret_key
 
 	if not app.secret_key:
 		raise RuntimeError("Environment variable RHODIUM_SECRET must be set")
@@ -252,32 +281,38 @@ def flask_setup(db_path: pathlib.Path | None = None) -> Flask:
 			return jsonify({"status": "unhealthy", "error": str(e)}), 503
 
 	if not app.debug:
-		log_dir = db_path.parent / 'logs'
-		log_dir.mkdir(exist_ok=True)
+		log_dir = pathlib.Path('/var/log/rhodium')
+		log_file = log_dir.joinpath('rhodium.log')
+
+		try:
+			log_dir.mkdir(parents=True, exist_ok=True)
+
+			# WatchedFileHandler detects when logrotate moves the file
+			handler = WatchedFileHandler(log_file)
+			handler.setFormatter(logging.Formatter(
+				'[%(asctime)s] %(levelname)s in %(module)s: %(message)s'
+			))
+			handler.setLevel(logging.INFO)
+			app.logger.addHandler(handler)
+			app.logger.setLevel(logging.INFO)
+			app.logger.info('Rhodium startup')
 		
-		handler = RotatingFileHandler(
-			log_dir / 'rhodium.log',
-			maxBytes=10_000_000,
-			backupCount=5
-		)
-		handler.setFormatter(logging.Formatter(
-			'[%(asctime)s] %(levelname)s in %(module)s: %(message)s'
-		))
-		handler.setLevel(logging.INFO)
-		app.logger.addHandler(handler)
-		app.logger.setLevel(logging.INFO)
-		app.logger.info('Rhodium startup')
+		except (PermissionError, OSError) as e:
+			print(f"WARNING: Cannot set up file logging: {e}", file=sys.stderr)
+			app.logger.setLevel(logging.INFO)
+			app.logger.info('Rhodium startup (stderr logging only)')
 
 	return app
 
 if __name__ == "__main__":
 	parser = argparse.ArgumentParser(description="Rhodium hestia runtime")
-	parser.add_argument('--path', type=pathlib.Path, default=pathlib.Path("/home/rhodium/db"))
+	parser.add_argument('--dir', type=pathlib.Path, default=pathlib.Path("/var/lib/rhodium"), help='Run with custom mutable path (optional)')
+	parser.add_argument('--log', type=pathlib.Path, default=pathlib.Path("/var/log/rhodium"), help='Run with custom logging path (optional)')
 	parser.add_argument('--dev', action='store_true', help='Run in development mode')
+	parser.add_argument('--regen', action='store_true', help='Regenerate secrets')
 	args = parser.parse_args()
 
-	DB_PATH = args.path.joinpath("rhodium.db")
-	app = flask_setup(DB_PATH)
+	app = flask_setup(args.dir, args.log, get_secret(args.dir, args.regen))
 	
 	if args.dev:
 		app.run(host="0.0.0.0", port=80, debug=True)
