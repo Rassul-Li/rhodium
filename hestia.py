@@ -31,6 +31,9 @@ from chaos import (
 	make_engine
 )
 
+import logging
+from logging.handlers import RotatingFileHandler  
+
 # ---------------------------------------------------------------------
 #  ID Generation
 # ---------------------------------------------------------------------
@@ -242,11 +245,11 @@ def flask_setup(db_path: pathlib.Path | None = None) -> Flask:
 	
 	@app.route("/health")
 	def health():
-	try:
-		g.db.execute(select(1))
-		return jsonify({"status": "healthy"}), 200
-	except Exception as e:
-		return jsonify({"status": "unhealthy", "error": str(e)}), 503
+		try:
+			g.db.execute(select(1))
+			return jsonify({"status": "healthy"}), 200
+		except Exception as e:
+			return jsonify({"status": "unhealthy", "error": str(e)}), 503
 
 	if not app.debug:
 		log_dir = db_path.parent / 'logs'
