@@ -37,7 +37,7 @@ class Seed:
 
 def make_engine(db_path: pathlib.Path):
 	url = f"sqlite:///{db_path}"
-	return create_engine(url, future=True)
+	return create_engine(url, pool_size=10, max_overflow=20, pool_pre_ping=True)
 
 # ORM models
 

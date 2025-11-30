@@ -120,6 +120,8 @@ def flask_setup(db_path: pathlib.Path | None = None) -> Flask:
 	def teardown_request(exception):
 		db = g.pop('db', None)
 		if db is not None:
+			if exception:
+				db.rollback()
 			db.close()
 	
 
@@ -237,19 +239,46 @@ def flask_setup(db_path: pathlib.Path | None = None) -> Flask:
 			}
 			for i in rows
 		])
+	
+	@app.route("/health")
+	def health():
+	try:
+		g.db.execute(select(1))
+		return jsonify({"status": "healthy"}), 200
+	except Exception as e:
+		return jsonify({"status": "unhealthy", "error": str(e)}), 503
+
+	if not app.debug:
+		log_dir = db_path.parent / 'logs'
+		log_dir.mkdir(exist_ok=True)
+		
+		handler = RotatingFileHandler(
+			log_dir / 'rhodium.log',
+			maxBytes=10_000_000,
+			backupCount=5
+		)
+		handler.setFormatter(logging.Formatter(
+			'[%(asctime)s] %(levelname)s in %(module)s: %(message)s'
+		))
+		handler.setLevel(logging.INFO)
+		app.logger.addHandler(handler)
+		app.logger.setLevel(logging.INFO)
+		app.logger.info('Rhodium startup')
 
 	return app
 
 if __name__ == "__main__":
-
 	parser = argparse.ArgumentParser(description="Rhodium hestia runtime")
 	parser.add_argument('--path', type=pathlib.Path, default=pathlib.Path("/home/rhodium/db"))
+	parser.add_argument('--dev', action='store_true', help='Run in development mode')
 	args = parser.parse_args()
 
 	DB_PATH = args.path.joinpath("rhodium.db")
-
-	print(f'DB_PATH: {DB_PATH}')
-	DB_URI = f"sqlite:///{DB_PATH}"
-
 	app = flask_setup(DB_PATH)
-	app.run(host="0.0.0.0", port=80)
+	
+	if args.dev:
+		app.run(host="0.0.0.0", port=80, debug=True)
+	else:
+		from waitress import serve
+		print(f'Serving on http://0.0.0.0:80')
+		serve(app, host="0.0.0.0", port=80, threads=4)
