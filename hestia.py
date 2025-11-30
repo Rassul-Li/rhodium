@@ -14,12 +14,13 @@ from __future__ import annotations
 
 import os
 import binascii
-from datetime import datetime, date
+from datetime import datetime, timezone, date, time
+from zoneinfo import ZoneInfo
 import argparse
 import pathlib
 
 from flask import (
-	Flask, render_template, request, redirect, url_for, flash, jsonify
+	Flask, render_template, request, redirect, url_for, flash, jsonify, g
 )
 from sqlalchemy import create_engine, select, update
 from sqlalchemy.orm import Session
@@ -64,7 +65,6 @@ def generate_item_id(session: Session) -> bytes:
 		.where(Counters.key == "primary_counter")
 		.values(value=new_value, last_change=datetime.now(timezone.utc))
 	)
-	session.commit()
 
 	ctr_bytes = new_value.to_bytes(7, "big")
 
@@ -91,29 +91,45 @@ def unhexid(s: str) -> bytes:
 
 
 # ---------------------------------------------------------------------
-def flask_setup(db_path: pathlib.Path) -> Flask:
-	app = Flask(__name__)
-	app.secret_key = os.getenv("RHODIUM_SECRET", "pineapple-pizza-extravaganza")
+def flask_setup(db_path: pathlib.Path | None = None) -> Flask:
 
+	if db_path is None:
+		db_path = pathlib.Path("/home/rhodium/db/rhodium.db")
+	
+	db_path.parent.mkdir(parents=True, exist_ok=True)
+
+	app = Flask(__name__)
+
+	app.secret_key = os.getenv("RHODIUM_SECRET")
+
+	if not app.secret_key:
+		raise RuntimeError("Environment variable RHODIUM_SECRET must be set")
+	
+	# Store engine in config
 	engine = make_engine(db_path)
 	Base.metadata.create_all(engine)
-	app.engine = engine
-
-	# ---------------------------------------------------------------------
-	#  Routes
-	# ---------------------------------------------------------------------
+	app.config['SQLALCHEMY_ENGINE'] = engine
+	
+	# Create session for each request
+	@app.before_request
+	def before_request():
+		g.db = Session(app.config['SQLALCHEMY_ENGINE'])
+	
+	# Clean up session after each request
+	@app.teardown_request
+	def teardown_request(exception):
+		db = g.pop('db', None)
+		if db is not None:
+			db.close()
+	
 
 	@app.route("/")
 	def index():
-		"""List all items sorted by priority and due_date."""
-		with Session(engine) as session:
-			rows = session.execute(
-				select(Item).order_by(Item.priority.desc(), Item.due_date.asc().nulls_last())
-			).scalars().all()
-
+		rows = g.db.execute(
+			select(Item).order_by(Item.priority.desc(), Item.due_date.asc().nulls_last())
+		).scalars().all()
 		return render_template("index.html", items=rows)
-
-
+	
 	@app.route("/create", methods=["GET", "POST"])
 	def create():
 		if request.method == "POST":
@@ -121,28 +137,25 @@ def flask_setup(db_path: pathlib.Path) -> Flask:
 			if not title:
 				flash("Title is required.", "danger")
 				return redirect(url_for("create"))
-
+			
 			description = request.form.get("description") or None
 			recurring = request.form.get("recurring") or None
 			priority = int(request.form.get("priority") or 0)
 			due_raw = request.form.get("due_date")
-
 			due_date = datetime.fromisoformat(due_raw) if due_raw else None
-
-			with Session(engine) as session:
-				item_id = generate_item_id(session)
-
-				itm = Item(
-					id=item_id,
-					title=title,
-					description=description,
-					due_date=due_date,
-					recurring=recurring,
-					priority=priority,
-				)
-				session.add(itm)
-				session.commit()
-
+			
+			item_id = generate_item_id(g.db)
+			itm = Item(
+				id=item_id,
+				title=title,
+				description=description,
+				due_date=due_date,
+				recurring=recurring,
+				priority=priority,
+			)
+			g.db.add(itm)
+			g.db.commit()
+			
 			flash("Item created.", "success")
 			return redirect(url_for("index"))
 
@@ -155,61 +168,65 @@ def flask_setup(db_path: pathlib.Path) -> Flask:
 			item_id = unhexid(item_hex)
 		except ValueError:
 			return "Invalid ID", 400
-
-		with Session(engine) as session:
-			item = session.get(Item, item_id)
-
-			if item is None:
-				return "Item not found", 404
-
-			if request.method == "POST":
-				title = request.form["title"]
-				description = request.form.get("description") or None
-				recurring = request.form.get("recurring") or None
-				priority = int(request.form.get("priority") or 0)
-				status = request.form.get("status") or item.status
-
-				due_raw = request.form.get("due_date")
-				due_date = datetime.fromisoformat(due_raw) if due_raw else None
-
-				completed_at = item.completed_at
-				if status == "done" and item.completed_at is None:
-					completed_at = datetime.now(timezone.utc)
-
-				session.execute(
-					update(Item)
-					.where(Item.id == item_id)
-					.values(
-						title=title,
-						description=description,
-						due_date=due_date,
-						recurring=recurring,
-						priority=priority,
-						status=status,
-						completed_at=completed_at,
-					)
+		
+		item = g.db.get(Item, item_id)
+		if item is None:
+			return "Item not found", 404
+		
+		if request.method == "POST":
+			title = request.form["title"]
+			description = request.form.get("description") or None
+			recurring = request.form.get("recurring") or None
+			priority = int(request.form.get("priority") or 0)
+			status = request.form.get("status") or item.status
+			due_raw = request.form.get("due_date")
+			due_date = datetime.fromisoformat(due_raw) if due_raw else None
+			
+			completed_at = item.completed_at
+			if status == "done" and item.completed_at is None:
+				completed_at = datetime.now(timezone.utc)
+			
+			g.db.execute(
+				update(Item)
+				.where(Item.id == item_id)
+				.values(
+					title=title,
+					description=description,
+					due_date=due_date,
+					recurring=recurring,
+					priority=priority,
+					status=status,
+					completed_at=completed_at,
 				)
-				session.commit()
-
-				flash("Item updated.", "success")
-				return redirect(url_for("index"))
-
+			)
+			g.db.commit()
+			flash("Item updated.", "success")
+			return redirect(url_for("index"))
+		
 		return render_template("edit.html", item=item, item_hex=item_hex)
 
 
 	@app.route("/api/today")
 	def api_today():
-		"""Return all items due today or overdue."""
-		now = datetime.now(timezone.utc)
-
-		with Session(engine) as session:
-			rows = session.execute(
-				select(Item)
-				.where(Item.status != "done")
-				.where((Item.due_date == None) | (Item.due_date <= now))
-				.order_by(Item.priority.desc())
-			).scalars().all()
-
+		tz_name = request.args.get("tz", "UTC")
+		
+		try:
+			user_tz = ZoneInfo(tz_name)
+		except Exception:
+			return jsonify({"error": f"Invalid timezone: {tz_name}"}), 400
+		
+		# End of today in user's timezone
+		now_user = datetime.now(timezone.utc).astimezone(user_tz)
+		today_end = datetime.combine(now_user.date(), time.max, tzinfo=user_tz)
+		
+		# Get all incomplete items due by end of today (or with no due date)
+		rows = g.db.execute(
+			select(Item)
+			.where(Item.status != "done")
+			.where((Item.due_date.is_(None)) | (Item.due_date <= today_end))
+			.order_by(Item.priority.desc())
+		).scalars().all()
+		
 		return jsonify([
 			{
 				"id": hexid(i.id),
@@ -220,11 +237,11 @@ def flask_setup(db_path: pathlib.Path) -> Flask:
 			}
 			for i in rows
 		])
+
 	return app
 
-
-
 if __name__ == "__main__":
+
 	parser = argparse.ArgumentParser(description="Rhodium hestia runtime")
 	parser.add_argument('--path', type=pathlib.Path, default=pathlib.Path("/home/rhodium/db"))
 	args = parser.parse_args()
