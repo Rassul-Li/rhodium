@@ -33,7 +33,7 @@ from chaos import (
 )
 
 import logging
-from logging.handlers import RotatingFileHandler  
+from logging.handlers import WatchedFileHandler  
 
 # ---------------------------------------------------------------------
 #  ID Generation
