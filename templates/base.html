@@ -52,9 +52,15 @@
 		.btn:hover {
 			background: #ccc;
 		}
+		footer.highlighted {
+			background-color: #fffbcc; /* Light yellow background */
+			border: 2px solid #ffd700; /* Gold border */
+			padding: 10px;
+		}
 	</style>
 </head>
 <body>
+	<main>
 
 <div class="nav">
 	<a href="{{ url_for('index') }}">Home</a>
@@ -62,14 +68,27 @@
 </div>
 
 {% with messages = get_flashed_messages(with_categories=true) %}
-  {% if messages %}
-	{% for cat, msg in messages %}
-	  <div class="flash">{{ msg }}</div>
-	{% endfor %}
-  {% endif %}
+	{% if messages %}
+		{% for cat, msg in messages %}
+			<div class="flash">{{ msg }}</div>
+		{% endfor %}
+	{% endif %}
 {% endwith %}
 
 {% block content %}{% endblock %}
+</main>
+
+<footer class="{% if tz_arg_exists == False %}highlighted{% endif %}">
+	<div class="timezone-info">
+		<span>Displaying times in:</span>
+		<span class="timezone-badge">{{ tz_label }} ({{ tz }})</span>
+		{% if tz != 'UTC' %}
+			<span>|</span>
+			<a href="{{ request.path }}?tz=UTC">Switch to UTC</a>
+		{% endif %}
+	</div>
+</footer>
+
 
 </body>
 </html>

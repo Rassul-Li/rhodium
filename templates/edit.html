@@ -24,8 +24,8 @@
 
 	<label>Status</label>
 	<select name="status">
-		<option value="pending" {% if item.status == "pending" %}selected{% endif %}>Pending</option>
-		<option value="in-progress" {% if item.status == "in-progress" %}selected{% endif %}>In Progress</option>
+		<option value="todo" {% if item.status == "todo" %}selected{% endif %}>Pending</option>
+		<option value="in_progress" {% if item.status == "in_progress" %}selected{% endif %}>In Progress</option>
 		<option value="done" {% if item.status == "done" %}selected{% endif %}>Done</option>
 	</select>
 

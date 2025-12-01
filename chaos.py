@@ -5,19 +5,19 @@ Initializes the SQLite database using SQLAlchemy 2.x declarations.
 """
 from __future__ import annotations
 
-import os
+
 import hashlib
 import secrets
 import uuid
 import pathlib
 import argparse
+from typing import Callable, Any
 from datetime import datetime, timezone
 from functools import partial
 
-from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime, Date, ForeignKey
+from sqlalchemy.orm import Session
 
-from sqlalchemy.orm import DeclarativeBase, relationship, Session, Mapped, mapped_column
-from sqlalchemy.types import BLOB
+import chiron
 
 def get_node_id() -> str:	# 16-bit hex string
 	mac_int = uuid.getnode()	# 48-bit int
@@ -28,73 +28,37 @@ def get_node_id() -> str:	# 16-bit hex string
 class Seed:
 	def __init__(self):
 		self.value = secrets.randbits(56)
-	def __call__(self):
+	def __call__(self) -> int:
 		return self.value
-	def hex(self):
+	def hex(self) -> str:
 		return f"{self.value:014x}"
 
-# Engine Factory
-
-def make_engine(db_path: pathlib.Path):
-	url = f"sqlite:///{db_path}"
-	return create_engine(url, pool_size=10, max_overflow=20, pool_pre_ping=True)
-
-# ORM models
-
-class Base(DeclarativeBase):
-	pass
-
-class SysParameters(Base):
-	__tablename__ = "SysParameters"
-	key: Mapped[str] = mapped_column(String, primary_key=True)
-	value: Mapped[str] = mapped_column(String, nullable=False)
-	last_change: Mapped[datetime] = mapped_column(DateTime, default=partial(datetime.now, tz=timezone.utc))
-
-class Counters(Base):
-	__tablename__ = "Counters"
-	key: Mapped[str] = mapped_column(String, primary_key=True)
-	value: Mapped[int] = mapped_column(Integer, nullable=False)
-	last_change: Mapped[datetime] = mapped_column(DateTime, default=partial(datetime.now, tz=timezone.utc))
-
-class Item(Base):
-	__tablename__ = "items"
-
-	id: Mapped[bytes] = mapped_column(BLOB(16), primary_key=True)
-	title: Mapped[str] = mapped_column(nullable=False)
-	description: Mapped[str | None] = mapped_column(nullable=True)
-	status: Mapped[str] = mapped_column(String, default="pending", nullable=False)
-	due_date: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-	created_at: Mapped[datetime] = mapped_column(DateTime, default=partial(datetime.now, tz=timezone.utc))
-	completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-	recurring: Mapped[str | None] = mapped_column(String(64), nullable=True)
-	priority: Mapped[int] = mapped_column(Integer, default=0)
-
-def ensure_parameter(session: Session, key: str, value_fn):
-	row = session.get(SysParameters, key)
+def ensure_parameter(session: Session, key: str, value_fn: Callable[[], Any]) -> str:
+	row = session.get(chiron.SysParameters, key)
 	if row is None:
 		v = value_fn()
-		session.add(SysParameters(key=key, value=str(v)))
+		session.add(chiron.SysParameters(key=key, value=str(v)))
 		return v
 	return row.value
 
-def ensure_counter(session: Session, key: str, initial_fn):
-	row = session.get(Counters, key)
+def ensure_counter(session: Session, key: str, initial_fn: Callable[[], Any]) -> int:
+	row = session.get(chiron.Counters, key)
 	if row is None:
 		v = initial_fn()
-		session.add(Counters(key=key, value=int(v)))
+		session.add(chiron.Counters(key=key, value=int(v)))
 		return v
 	return row.value
 
 def print_parameters(session: Session):
 	print("\n[sys_parameters]")
-	rows = session.query(SysParameters).all()
+	rows = session.query(chiron.SysParameters).all()
 	if not rows:
 		print("  (empty)")
 	for r in rows:
 		print(f"{r.key:<16}: {r.value}  (changed: {r.last_change})")
 
 	print("\n[counters]")
-	rows = session.query(Counters).all()
+	rows = session.query(chiron.Counters).all()
 	if not rows:
 		print("  (empty)")
 	for r in rows:
@@ -120,12 +84,12 @@ def main():
 
 	print(f'DB_PATH: {DB_PATH}')
 	DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-	engine = make_engine(DB_PATH)
+	engine = chiron.make_engine(DB_PATH)
 
 	if not DB_PATH.exists() or args.no_preserve_db:
 		print("Creating DB schema...")
-		Base.metadata.drop_all(engine)
-		Base.metadata.create_all(engine)
+		chiron.Base.metadata.drop_all(engine)
+		chiron.Base.metadata.create_all(engine)
 
 		with Session(engine) as session:
 			print("Initializing parameters...")

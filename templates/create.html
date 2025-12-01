@@ -6,21 +6,30 @@
 <form method="post">
 
 	<label>Title</label>
-	<input type="text" name="title" required>
+	<input type="text" name="title" value="{{ item.title }}" required>
 
 	<label>Description</label>
-	<textarea name="description" rows="4"></textarea>
+	<textarea name="description" rows="4">{{ item.description or "" }}</textarea>
 
 	<label>Due Date</label>
-	<input type="datetime-local" name="due_date">
+	<input type="datetime-local"
+		   name="due_date"
+		   value="{% if item.due_date %}{{ item.due_date.strftime('%Y-%m-%dT%H:%M') }}{% endif %}">
 
 	<label>Recurring (optional)</label>
-	<input type="text" name="recurring" placeholder="e.g. daily, weekly">
+	<input type="text" name="recurring" value="{{ item.recurring or '' }}">
 
 	<label>Priority</label>
-	<input type="number" name="priority" value="0">
+	<input type="number" name="priority" value="{{ item.priority }}">
 
-	<button class="btn" type="submit">Create</button>
+	<label>Status</label>
+	<select name="status">
+		<option value="todo" {% if item.status == "todo" %}selected{% endif %}>Pending</option>
+		<option value="in_progress" {% if item.status == "in_progress" %}selected{% endif %}>In Progress</option>
+		<option value="done" {% if item.status == "done" %}selected{% endif %}>Done</option>
+	</select>
+
+	<button class="btn" type="submit">Save</button>
 </form>
 
 {% endblock %}
