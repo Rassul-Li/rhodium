@@ -63,8 +63,8 @@
 	<main>
 
 <div class="nav">
-	<a href="{{ url_for('index') }}">Home</a>
-	<a href="{{ url_for('create') }}">New Task</a>
+	<a href="{{ url_for('main.index') }}">Home</a>
+	<a href="{{ url_for('main.create') }}">New Task</a>
 </div>
 
 {% with messages = get_flashed_messages(with_categories=true) %}
