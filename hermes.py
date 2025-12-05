@@ -182,7 +182,9 @@ def create():
 		return redirect(url_for("main.index", tz=tz_param))
 	
 	tz_label = get_tz_label(user_tz)
-	return render_template("create.html", tz=tz_param, tz_label=tz_label, tz_arg_exists=tz_arg_exists)
+	# Create empty item object for form rendering
+	empty_item = type('Item', (), {'title': '', 'description': '', 'priority': 0, 'status': 'todo', 'recurring': ''})()
+	return render_template("create.html", item=empty_item, tz=tz_param, tz_label=tz_label, tz_arg_exists=tz_arg_exists)
 
 @bp.route("/edit/<string:item_hex>", methods=["GET", "POST"])
 def edit(item_hex: str):

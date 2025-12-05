@@ -14,7 +14,7 @@
 	<label>Due Date</label>
 	<input type="datetime-local"
 		   name="due_date"
-		   value="{% if item.due_date %}{{ item.due_date.strftime('%Y-%m-%dT%H:%M') }}{% endif %}">
+		   value="{{ due_date_formatted or '' }}">
 
 	<label>Recurring (optional)</label>
 	<input type="text" name="recurring" value="{{ item.recurring or '' }}">
