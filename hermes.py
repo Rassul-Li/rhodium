@@ -237,18 +237,27 @@ def api_today():
 	
 	# End of today in user's timezone
 	now_user = datetime.now(timezone.utc).astimezone(user_tz)
+	today_start = datetime.combine(now_user.date(), time.min, tzinfo=user_tz).astimezone(timezone.utc)
 	today_end = datetime.combine(now_user.date(), time.max, tzinfo=user_tz).astimezone(timezone.utc)
 	
 	# Get all incomplete items due by end of today (or with no due date)
-	rows = g.db.execute(
+	today = g.db.execute(
 		select(chiron.Item)
 		.where(chiron.Item.status != "done")
-		.where((chiron.Item.due_date.is_(None)) | (chiron.Item.due_date <= today_end))
+		.where((chiron.Item.due_date.is_(None)) | ((chiron.Item.due_date <= today_end) & (chiron.Item.due_date >= today_start)))
+		.order_by(chiron.Item.priority.desc())
+	).scalars().all()
+
+	overdue = g.db.execute(
+		select(chiron.Item)
+		.where(chiron.Item.status != "done")
+		.where(chiron.Item.due_date < today_start)
 		.order_by(chiron.Item.priority.desc())
 	).scalars().all()
 	
 	# Prepare items based on timezone
-	items_to_return = items_with_tz(rows, user_tz)
+	today_with_tz = items_with_tz(today, user_tz)
+	overdue_with_tz = items_with_tz(overdue, user_tz)
 	
 	return jsonify({
 		"metadata": {
@@ -257,16 +266,27 @@ def api_today():
 			"iso_weekday": now_user.isoweekday(),  # 1=Monday, 7=Sunday
 			"date": now_user.date().isoformat()
 		},
-		"items": [
+		"items today": [
 			{
-				"id": chiron.hexid(i.id),
+				"id": i.hex_id,
 				"title": i.title,
 				"description": i.description,
 				"due_date": i.due_date.isoformat() if i.due_date else None,
 				"status": i.status,
 				"priority": i.priority,
 			}
-			for i in items_to_return
+			for i in today_with_tz
+		],
+		"items overdue": [
+			{
+				"id": i.hex_id,
+				"title": i.title,
+				"description": i.description,
+				"due_date": i.due_date.isoformat() if i.due_date else None,
+				"status": i.status,
+				"priority": i.priority,
+			}
+			for i in overdue_with_tz
 		]
 	})
 
