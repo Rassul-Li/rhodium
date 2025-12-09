@@ -237,6 +237,7 @@ def api_today():
 	
 	# End of today in user's timezone
 	now_user = datetime.now(timezone.utc).astimezone(user_tz)
+	now_user_iso = now_user.isocalendar()
 	today_start = datetime.combine(now_user.date(), time.min, tzinfo=user_tz).astimezone(timezone.utc)
 	today_end = datetime.combine(now_user.date(), time.max, tzinfo=user_tz).astimezone(timezone.utc)
 	
@@ -263,7 +264,9 @@ def api_today():
 		"metadata": {
 			"user_tz": str(user_tz),
 			"current_time": now_user.isoformat(),
-			"iso_weekday": now_user.isoweekday(),  # 1=Monday, 7=Sunday
+			"iso_weekday": str(now_user_iso.weekday),
+			"iso_week": f'{now_user_iso.week:02}',
+			"iso_year": str(now_user_iso.year),
 			"date": now_user.date().isoformat()
 		},
 		"items today": [
