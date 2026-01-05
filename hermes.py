@@ -244,7 +244,7 @@ def api_today():
 		select(chiron.Item)
 		.where(chiron.Item.status != "done")
 		.where((chiron.Item.due_date.is_(None)) | (chiron.Item.due_date <= today_end))
-		.order_by(chiron.Item.priority.desc())
+		.order_by(chiron.Item.priority.desc(), chiron.Item.due_date.asc().nulls_last())
 	).scalars().all()
 	
 	# Prepare items based on timezone
